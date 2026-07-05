@@ -4,7 +4,6 @@
 # All the default Omarchy aliases and functions
 # (don't mess with these directly, just overwrite them here!)
 source ~/.local/share/omarchy/default/bash/rc
-source /usr/share/nvm/init-nvm.sh
 
 # Add your own exports, aliases, and functions here.
 #
@@ -12,4 +11,13 @@ source /usr/share/nvm/init-nvm.sh
 # alias p='python'
 export GOPATH=$HOME/go
 export PATH=$PATH:$GOPATH/bin
-export PATH=$PATH:$HOME/.local/bin
+export VOLTA_HOME="$HOME/.volta"
+export PATH="$VOLTA_HOME/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
+export PATH="$VOLTA_HOME/tools/image/node/22.17.1/bin:$PATH"
+
+# peon-ping quick controls
+alias peon="bash /home/hillerstorm/.claude/hooks/peon-ping/peon.sh"
+[ -f /home/hillerstorm/.claude/hooks/peon-ping/completions.bash ] && source /home/hillerstorm/.claude/hooks/peon-ping/completions.bash
+
+eval "$(thefuck --alias)"
