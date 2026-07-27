@@ -1,0 +1,20 @@
+#!/bin/bash
+# Toggle the Samsung CRG9 between full resolution and PBP half resolution.
+# PBP splits the monitor into two 2560x1440@60 halves, so the DP input must
+# drop to that mode before enabling PBP in the OSD, and back afterwards.
+
+FULL="5120x1440@120"
+HALF="2560x1440@60"
+
+mon=$(hyprctl monitors -j | jq -r '[.[] | select(.model | test("C49RG9"))][0].name // empty')
+[[ -z "$mon" ]] && mon=$(hyprctl monitors -j | jq -r '.[0].name')
+
+width=$(hyprctl monitors -j | jq -r --arg m "$mon" '.[] | select(.name == $m) | .width')
+
+if [[ "$width" == "5120" ]]; then
+  hyprctl keyword monitor "$mon,$HALF,auto,1"
+  notify-send "PBP mode" "Switched $mon to $HALF — now enable PBP in the monitor OSD"
+else
+  hyprctl keyword monitor "$mon,$FULL,auto,1"
+  notify-send "Full resolution" "Switched $mon back to $FULL — disable PBP in the OSD if still on"
+fi
