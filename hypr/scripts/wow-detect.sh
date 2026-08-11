@@ -1,13 +1,37 @@
 #!/bin/bash
 #
 # Detects World of Warcraft open/close via Hyprland socket events.
-# When WoW opens:  swap it to master, remove gaps, hide waybar
-# When WoW closes: restore gaps, show waybar
+# When WoW opens:  swap it to master, remove gaps, hide the bar
+# When WoW closes: restore gaps, show the bar
+#
+# Works on both Omarchy 3.x (waybar) and 4.x/quattro (Quickshell bar).
 
 SOCK="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 WOW_TITLE="World of Warcraft"
 WOW_ADDR=""
 WOW_WORKSPACE=""
+
+# Quattro note: the shell watches a flag literally named "bar-off", and
+# omarchy-toggle-bar passes its argument straight through to that flag —
+# so "on" creates bar-off (bar HIDDEN) and "off" removes it (bar shown).
+# Confirmed by omarchy's test/shell.d/toggle-test.sh.
+hide_bar() {
+    if command -v omarchy-toggle-bar >/dev/null 2>&1; then
+        omarchy-toggle-bar on
+    else
+        # 3.x: only toggle if waybar is currently visible
+        pgrep -x waybar >/dev/null && omarchy-toggle-waybar
+    fi
+}
+
+show_bar() {
+    if command -v omarchy-toggle-bar >/dev/null 2>&1; then
+        omarchy-toggle-bar off
+    else
+        # 3.x: only toggle if waybar is currently hidden
+        pgrep -x waybar >/dev/null || omarchy-toggle-waybar
+    fi
+}
 
 wow_opened() {
     local addr="$1" workspace="$2"
@@ -24,8 +48,7 @@ wow_opened() {
     gaps=$(hyprctl getoption general:gaps_out -j | jq -r '.custom' | awk '{print $1}')
     [[ "$gaps" != "0" ]] && omarchy-hyprland-window-gaps-toggle
 
-    # Hide waybar (only if currently visible)
-    pgrep -x waybar >/dev/null && omarchy-toggle-waybar
+    hide_bar
 }
 
 wow_closed() {
@@ -34,8 +57,7 @@ wow_closed() {
     gaps=$(hyprctl getoption general:gaps_out -j | jq -r '.custom' | awk '{print $1}')
     [[ "$gaps" == "0" ]] && omarchy-hyprland-window-gaps-toggle
 
-    # Show waybar (only if currently hidden)
-    pgrep -x waybar >/dev/null || omarchy-toggle-waybar
+    show_bar
 
     WOW_ADDR=""
     WOW_WORKSPACE=""
