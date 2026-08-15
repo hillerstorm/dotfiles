@@ -41,3 +41,23 @@ hyprctl reload   # or reboot for the full cutover
 - **Mako colors**: notifications are shell-themed now; old config is orphaned.
 - To skip quattro's third-party agent preinstalls (grok/crush/oh-my-pi):
   `touch ~/.local/state/omarchy/preinstalls-removed` **before** upgrading.
+
+## Day-one 4.0.0 findings (from upstream issues, 2026-08-15)
+
+- **`sudo pacman -S --asexplicit bluez-tools` before upgrading** — the upgrade
+  enables `bt-agent.service` (unit shipped by omarchy-settings) but nothing
+  installs `/usr/bin/bt-agent` (bluez-tools), causing an infinite 2s restart
+  loop (upstream #6992). We don't have bluez-tools installed, so we'd hit it.
+- **Remote-unlock survives**: the script `--overwrite`s only its own
+  `omarchy_hooks.conf`; our `zz-remote-unlock.conf` (sorts last, wins) keeps
+  netconf/dropbear/encryptssh. **After upgrade, verify** the new UKI still has
+  them: `lsinitcpio -l <initrd> | grep -E 'dropbear|encryptssh'` **before
+  rebooting** (cf. #6876 — the drop-in replaces HOOKS wholesale).
+- **`pbp-toggle` may break**: `hyprctl keyword monitor` silently no-ops under
+  the Lua config on Hyprland 0.56 (#6968). If SUPER+SHIFT+P stops working,
+  rework via Lua monitor override + reload once upstream settles.
+- **LUKS unlock now auto-logs-in** to the session (#6997) — no user password
+  after disk unlock. Combined with remote dropbear unlock, this means an
+  unlocked machine has an open session. Check for an autologin toggle.
+- **Stale Chromium SingletonLock** can loop migration 1786643346 after reboot
+  (#6866) — chromium is installed here; make sure it exited cleanly pre-upgrade.
