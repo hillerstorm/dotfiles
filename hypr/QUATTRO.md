@@ -41,13 +41,22 @@ hyprctl reload   # or reboot for the full cutover
 - **Mako colors**: notifications are shell-themed now; old config is orphaned.
 - To skip quattro's third-party agent preinstalls (grok/crush/oh-my-pi):
   `touch ~/.local/state/omarchy/preinstalls-removed` **before** upgrading.
+  **DONE 2026-08-21** — the marker exists. It had to be created by hand: the
+  bridge only writes it when `bindings.lua` matches a stock sha256, which our
+  customized bindings never will.
 
 ## Day-one 4.0.0 findings (from upstream issues, 2026-08-15)
 
-- **`sudo pacman -S --asexplicit bluez-tools` before upgrading** — the upgrade
-  enables `bt-agent.service` (unit shipped by omarchy-settings) but nothing
-  installs `/usr/bin/bt-agent` (bluez-tools), causing an infinite 2s restart
-  loop (upstream #6992). We don't have bluez-tools installed, so we'd hit it.
+- **bluez-tools must be installed before upgrading** — the upgrade enables
+  `bt-agent.service` (unit shipped by omarchy-settings) but nothing installs
+  `/usr/bin/bt-agent` (bluez-tools), causing an infinite 2s restart loop
+  (upstream #6992; `bluez-tools` only appears in the fresh-install package
+  list, never in the upgrade path). **DONE 2026-08-21**: `bluez-tools` and
+  `bluez-utils` (same gap, `bluetoothctl` was missing too) are installed.
+- **claude-code pacman package removed 2026-08-21** (with `/opt/claude-code`
+  and `/usr/bin/claude`) — the native installer at `~/.local/bin/claude` is
+  the only install now, so quattro's agent-package → mise-wrapper migration
+  no longer has a claude breakage window here.
 - **Remote-unlock survives**: the script `--overwrite`s only its own
   `omarchy_hooks.conf`; our `zz-remote-unlock.conf` (sorts last, wins) keeps
   netconf/dropbear/encryptssh. **After upgrade, verify** the new UKI still has
