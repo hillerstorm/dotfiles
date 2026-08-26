@@ -55,8 +55,25 @@ hyprctl reload   # or reboot for the full cutover
   `bluez-utils` (same gap, `bluetoothctl` was missing too) are installed.
 - **claude-code pacman package removed 2026-08-21** (with `/opt/claude-code`
   and `/usr/bin/claude`) — the native installer at `~/.local/bin/claude` is
-  the only install now, so quattro's agent-package → mise-wrapper migration
-  no longer has a claude breakage window here.
+  the only install now. That does **not** close the mise-wrapper window
+  (verified against origin/quattro 2026-08-25): the upgrade runs
+  `omarchy-refresh-applications` → `install/user/mise.sh` →
+  `omarchy-mise-install claude`, which does `rm -f ~/.local/bin/claude` and
+  writes a mise stub there — the preinstalls-removed marker does not gate it.
+  **Decision 2026-08-25: let the stub win.** The native install was chosen for
+  its auto-updater, and the stub covers that: `mise use -g claude` on every
+  launch (release-age cooldown zeroed), new versions installable ~1-3h after
+  release (GitHub release lag + mise's 1h version cache). Verified: 17ms warm
+  launch overhead; offline + cold cache still launches the installed version
+  (so the claude-rc boot autostart, which uses `$HOME/.local/bin/claude`, is
+  safe); `claude update` under mise is a harmless refusal. Known trade-offs:
+  new-version downloads happen synchronously at launch, and pinning a version
+  means editing the stub (which `omarchy-refresh-applications` rewrites).
+  After the upgrade proves out: `rm -rf ~/.local/share/claude` to drop the
+  orphaned native copies. Rollback to native: rerun the native installer, or
+  `ln -sfn ~/.local/share/claude/versions/<v> ~/.local/bin/claude` while the
+  copies still exist. Crash prompts / menu launches exec `claude` from PATH
+  either way; set `omarchy default agent claude` once, since no default ships.
 - **Remote-unlock survives**: the script `--overwrite`s only its own
   `omarchy_hooks.conf`; our `zz-remote-unlock.conf` (sorts last, wins) keeps
   netconf/dropbear/encryptssh. **After upgrade, verify** the new UKI still has
@@ -70,6 +87,31 @@ hyprctl reload   # or reboot for the full cutover
   unlocked machine has an open session. Check for an autologin toggle.
 - **Stale Chromium SingletonLock** can loop migration 1786643346 after reboot
   (#6866) — chromium is installed here; make sure it exited cleanly pre-upgrade.
+
+## 4.0.1 released 2026-08-25 — checklist unchanged
+
+Mostly security fixes ("Fast-Follow Fixes",
+https://github.com/basecamp/omarchy/releases/tag/v4.0.1). Upgrade from 4.0 is
+`Update > Omarchy`; a fresh quattro bridge from 3.x should land here too.
+
+**Every issue tracked in this doc is still open as of 4.0.1** (verified via
+`gh issue view` on release day): #6992 bt-agent loop, #6968 `hyprctl keyword`
+no-op, #6997 LUKS autologin, #6866 Chromium SingletonLock, #8047/#6634 broken
+snapshot restore, #6876 HOOKS replacement. The pre-upgrade checklist and the
+manual rollback procedure below all still apply.
+
+What 4.0.1 changes for this machine:
+
+- **#8129 fixed**: USB device names are no longer executed as Hyprland Lua.
+  One less reason to fear the Lua config; nothing to do on our side.
+- **#8056/#8098**: the user is no longer put in the `docker` group; sudoless
+  Docker is opt-in via a menu toggle (which offers a reboot). After upgrading,
+  check `groups | grep docker` before assuming the Docker bindings work.
+- **#7001** (claude/codex launched with auto-review instead of
+  `--dangerously-skip-permissions`) is moot here — preinstalls are removed and
+  claude runs from `~/.local/bin`.
+- The `o.shell_succeeds()` fix (#6939) doesn't touch us; none of our `*.lua`
+  ports use it.
 
 ## Rollback: the advertised path is broken — use the manual one (2026-08-24)
 
