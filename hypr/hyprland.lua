@@ -9,6 +9,13 @@ dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/boo
 -- (Tmux, Docker, YouTube) are re-added in hypr/bindings.lua.
 omarchy_preinstalled_bindings = false
 
+-- Skip quattro's Quake-console scratchpad (qconsole.lua: top-half dropdown,
+-- dim_special 0.6, slide-from-top, seeded with omarchy-agent) so SUPER+S
+-- opens a plain full-area special workspace like pre-quattro. Stubbing
+-- package.loaded makes omarchy.lua's require a no-op; the bootstrap clears
+-- default.hypr.* entries on every reload, so this line re-arms each time.
+package.loaded["default.hypr.qconsole"] = true
+
 -- Load Omarchy defaults.
 require("default.hypr.omarchy")
 
@@ -21,6 +28,11 @@ require("hypr.autostart")
 
 -- Toggle config flags dynamically.
 require("default.hypr.toggles")
+
+-- Quattro disables the workspaces animation leaf, which specialWorkspace
+-- inherits now that qconsole (stubbed above) no longer overrides it. Restore
+-- the pre-quattro scratchpad slide.
+hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint", style = "slidevert" })
 
 -- No gaps on workspaces with a single tiled window (or a fullscreen one).
 hl.workspace_rule({ workspace = "w[tv1]s[false]", gaps_out = 0, gaps_in = 0 })
