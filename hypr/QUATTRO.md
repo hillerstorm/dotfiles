@@ -1,129 +1,77 @@
-# Omarchy 4.0 "quattro" migration notes
+# Omarchy 4.0 "quattro" — post-migration notes
 
-Quattro replaces Hyprland's `.conf` config with Lua (`hyprland.lua` entrypoint).
-The `*.lua` files in this directory are pre-written ports of our `*.conf`
-customizations, verified against `origin/quattro` of basecamp/omarchy and the
-upstream Hyprland Lua API (`hl.*`).
+Migration **completed 2026-08-26** (3.8.5 → quattro via `omarchy-upgrade-to-quattro`).
+The machine runs the **dev channel** (`omarchy-dev`, pacman repo pinned to
+`pkgs.omarchy.org/edge`) by deliberate choice. The pre-flight planning that used
+to live in this file is in git history (`git log -- hypr/QUATTRO.md`).
 
-## Deploying (after running `omarchy-upgrade-to-quattro`)
+## Live config
 
-The upgrade installs stock `~/.config/hypr/*.lua` files (backing up nothing of
-ours — the old `.conf` files are left in place but go **dead** after reboot).
-Replace the stock Lua files with these:
+The `*.lua` files in this directory are the config of record, deployed to
+`~/.config/hypr/`. Quattro's Hyprland reads `hyprland.lua` as the entrypoint;
+`.conf` files are dead and the ports were removed from this repo after cutover.
+`hyprsunset.conf`, `xdph.conf`, and `scripts/wow-detect.sh` are still used.
+
+**Never deploy the `.lua` files to a pre-quattro machine**: Hyprland 0.56+
+prefers `hyprland.lua` over `hyprland.conf` when present, and `hyprland.lua`
+dofile's `/usr/share/omarchy/default/hypr/bootstrap.lua`, which only exists
+once the quattro package is installed. Without it: lua error, zero binds,
+emergency mode (learned the hard way on 2026-08-26).
+
+## Files omarchy rewrites — recheck after updates
+
+- `/etc/sddm.conf.d/autologin.conf` — the bridge rewrote it once already,
+  dropping our `Relogin=true` (re-add: `sed -i '/^\[Autologin\]/a Relogin=true'`).
+  Autologin itself has no omarchy toggle; this file is the control (#6997 is
+  by design on encrypted installs).
+- `/usr/share/sddm/hyprland.conf` — carries our appended
+  `input { kb_layout = se }`. Unowned by any package, but an omarchy migration
+  could replace it. Without it the greeter is us-layout and the åäö account
+  password cannot be typed. Escape hatch, needs no password:
+  `docker run --rm --privileged --pid=host alpine nsenter -t 1 -m -u -i -n -- systemctl restart sddm`
+- `~/.local/bin/{grok,crush,claude}` — `omarchy-refresh-applications` writes
+  mise stubs regardless of the preinstalls-removed marker. claude's stub is
+  the accepted install; delete grok/crush if they reappear.
+- OpenLinkHub's pacman scriptlet disables its own service on upgrade —
+  `systemctl enable --now openlinkhub` after updates that touch it.
+
+## Known quirks (open upstream as of 2026-08-26)
+
+- `pbp-toggle` (SUPER+SHIFT+P): `hyprctl keyword monitor` silently no-ops
+  under the Lua config (#6968). Rework via a Lua monitor override when needed.
+- Network panel shows "Cloudflare": cosmetic — `omarchy-dns` reads only
+  `/etc/systemd/resolved.conf` (stale 3.x line) and ignores the
+  `50-adguard.conf` drop-in that actually routes DNS to 192.168.1.52.
+- Hand-editing `idle.*` in `~/.config/omarchy/shell.json` silently kills the
+  idle monitor until a shell restart (#8038) — use `omarchy toggle idle`.
+- Keyboard layout can revert to `en` after sleep (#8060); desktop rarely sleeps.
+
+## Verifying remote unlock after any UKI regeneration
+
+`zz-remote-unlock.conf` reassigns HOOKS wholesale and sorts last, so it wins —
+but verify after anything regenerates the UKI (kernel updates, omarchy
+migrations). The UKI is world-readable; no sudo needed:
 
 ```sh
-cp ~/src/dotfiles/hypr/*.lua ~/.config/hypr/
-hyprctl reload   # or reboot for the full cutover
+objcopy -O binary --only-section=.initrd /boot/EFI/Linux/omarchy_linux.efi /tmp/initrd
+lsinitcpio -l /tmp/initrd | grep -cE 'dropbear|encryptssh'   # baseline: 6 + 1
+objcopy -O binary --only-section=.cmdline /boot/EFI/Linux/omarchy_linux.efi /dev/stdout
+# must contain: ip=192.168.1.39... cryptdevice=PARTUUID=00ef58bc-... root=/dev/mapper/root
 ```
 
-## What's covered
+The pre-dropbear fallback UKI lives in `/boot/uki-backup/`. The pre-quattro
+anchor snapshot ("pre-quattro manual anchor") and the old checkout at
+`~/.local/share/omarchy.omarchy-upgrade-to-quattro.20260826205418.bak` remain
+until the machine has proven itself.
 
-| Old file | Port | Notes |
-|---|---|---|
-| `hyprland.conf` | `hyprland.lua` | workspace no-gaps rules, WoW windowrules, cursor no_warps, `omarchy_preinstalled_bindings = false` |
-| `monitors.conf` | `monitors.lua` | CRG9 5120x1440@120, GDK_SCALE=1 (stock quattro default is 2!) |
-| `input.conf` | `input.lua` | se layout, compose:rctrl + caps:swapescape + altwin swap, repeat_delay 600, follow_mouse 2, ydotool flat-accel device |
-| `bindings.conf` | `bindings.lua` | Tmux/Docker/YouTube re-added (preinstalled binds disabled), btop on SUPER+SHIFT+T, pbp-toggle |
-| `looknfeel.conf` | `looknfeel.lua` | master layout + center-master config, rounding 8, global opacity 1 1 |
-| `autostart.conf` | `autostart.lua` | wow-detect.sh |
-| `scripts/wow-detect.sh` | updated in place | now works on both 3.x (waybar) and 4.x (`omarchy-toggle-bar`) |
+## Rollback: the advertised path is broken — use the manual one
 
-## Not config files — do manually after upgrade
-
-- **Auto-lock comes back**: hypridle (and our never-lock `hypridle.conf`) is
-  gone; the Quickshell shell defaults to screensaver@150s / lock@300s.
-  Re-disable with `omarchy-toggle-idle` (bound to SUPER+CTRL+I) or edit the
-  `idle` section of `~/.config/omarchy/shell.json`.
-- **SUPER+C/V universal copy/paste** is stock in quattro (terminal-aware) —
-  our old override is intentionally not ported.
-- **Waybar tweaks** (module order, weather removed, margins) must be redone as
-  the bar widget layout in `~/.config/omarchy/shell.json`.
-- **Mako colors**: notifications are shell-themed now; old config is orphaned.
-- To skip quattro's third-party agent preinstalls (grok/crush/oh-my-pi):
-  `touch ~/.local/state/omarchy/preinstalls-removed` **before** upgrading.
-  **DONE 2026-08-21** — the marker exists. It had to be created by hand: the
-  bridge only writes it when `bindings.lua` matches a stock sha256, which our
-  customized bindings never will.
-
-## Day-one 4.0.0 findings (from upstream issues, 2026-08-15)
-
-- **bluez-tools must be installed before upgrading** — the upgrade enables
-  `bt-agent.service` (unit shipped by omarchy-settings) but nothing installs
-  `/usr/bin/bt-agent` (bluez-tools), causing an infinite 2s restart loop
-  (upstream #6992; `bluez-tools` only appears in the fresh-install package
-  list, never in the upgrade path). **DONE 2026-08-21**: `bluez-tools` and
-  `bluez-utils` (same gap, `bluetoothctl` was missing too) are installed.
-- **claude-code pacman package removed 2026-08-21** (with `/opt/claude-code`
-  and `/usr/bin/claude`) — the native installer at `~/.local/bin/claude` is
-  the only install now. That does **not** close the mise-wrapper window
-  (verified against origin/quattro 2026-08-25): the upgrade runs
-  `omarchy-refresh-applications` → `install/user/mise.sh` →
-  `omarchy-mise-install claude`, which does `rm -f ~/.local/bin/claude` and
-  writes a mise stub there — the preinstalls-removed marker does not gate it.
-  **Decision 2026-08-25: let the stub win.** The native install was chosen for
-  its auto-updater, and the stub covers that: `mise use -g claude` on every
-  launch (release-age cooldown zeroed), new versions installable ~1-3h after
-  release (GitHub release lag + mise's 1h version cache). Verified: 17ms warm
-  launch overhead; offline + cold cache still launches the installed version
-  (so the claude-rc boot autostart, which uses `$HOME/.local/bin/claude`, is
-  safe); `claude update` under mise is a harmless refusal. Known trade-offs:
-  new-version downloads happen synchronously at launch, and pinning a version
-  means editing the stub (which `omarchy-refresh-applications` rewrites).
-  After the upgrade proves out: `rm -rf ~/.local/share/claude` to drop the
-  orphaned native copies. Rollback to native: rerun the native installer, or
-  `ln -sfn ~/.local/share/claude/versions/<v> ~/.local/bin/claude` while the
-  copies still exist. Crash prompts / menu launches exec `claude` from PATH
-  either way; set `omarchy default agent claude` once, since no default ships.
-- **Remote-unlock survives**: the script `--overwrite`s only its own
-  `omarchy_hooks.conf`; our `zz-remote-unlock.conf` (sorts last, wins) keeps
-  netconf/dropbear/encryptssh. **After upgrade, verify** the new UKI still has
-  them: `lsinitcpio -l <initrd> | grep -E 'dropbear|encryptssh'` **before
-  rebooting** (cf. #6876 — the drop-in replaces HOOKS wholesale).
-- **`pbp-toggle` may break**: `hyprctl keyword monitor` silently no-ops under
-  the Lua config on Hyprland 0.56 (#6968). If SUPER+SHIFT+P stops working,
-  rework via Lua monitor override + reload once upstream settles.
-- **LUKS unlock now auto-logs-in** to the session (#6997) — no user password
-  after disk unlock. Combined with remote dropbear unlock, this means an
-  unlocked machine has an open session. Check for an autologin toggle.
-- **Stale Chromium SingletonLock** can loop migration 1786643346 after reboot
-  (#6866) — chromium is installed here; make sure it exited cleanly pre-upgrade.
-
-## 4.0.1 released 2026-08-25 — checklist unchanged
-
-Mostly security fixes ("Fast-Follow Fixes",
-https://github.com/basecamp/omarchy/releases/tag/v4.0.1). Upgrade from 4.0 is
-`Update > Omarchy`; a fresh quattro bridge from 3.x should land here too.
-
-**Every issue tracked in this doc is still open as of 4.0.1** (verified via
-`gh issue view` on release day): #6992 bt-agent loop, #6968 `hyprctl keyword`
-no-op, #6997 LUKS autologin, #6866 Chromium SingletonLock, #8047/#6634 broken
-snapshot restore, #6876 HOOKS replacement. The pre-upgrade checklist and the
-manual rollback procedure below all still apply.
-
-What 4.0.1 changes for this machine:
-
-- **#8129 fixed**: USB device names are no longer executed as Hyprland Lua.
-  One less reason to fear the Lua config; nothing to do on our side.
-- **#8056/#8098**: the user is no longer put in the `docker` group; sudoless
-  Docker is opt-in via a menu toggle (which offers a reboot). After upgrading,
-  check `groups | grep docker` before assuming the Docker bindings work.
-- **#7001** (claude/codex launched with auto-review instead of
-  `--dangerously-skip-permissions`) is moot here — preinstalls are removed and
-  claude runs from `~/.local/bin`.
-- The `o.shell_succeeds()` fix (#6939) doesn't touch us; none of our `*.lua`
-  ports use it.
-
-## Rollback: the advertised path is broken — use the manual one (2026-08-24)
-
-Upstream #8047 (same root cause as #6634), **confirmed on this machine**: the
-`btrfs-overlayfs` initcpio hook (last hook in both our HOOKS lines) mounts an
-overlay over `/` on every read-only snapshot boot, and `limine-snapper-sync`
-bails with "You are not in Btrfs" before parsing arguments when `/` is an
-overlay. So from a snapshot boot, `omarchy-snapshot restore` (→
-`limine-snapper-restore`) cannot ever work. The Limine "Snapshots" submenu
-still *boots* snapshots fine — old UKI + matching kernel are preserved in
-`/boot/<machine-id>/limine_history/` — you just can't restore from one with
-the tooling. Restore by hand instead.
+Upstream #8047 (same root cause as #6634), confirmed on this machine: the
+`btrfs-overlayfs` initcpio hook mounts an overlay over `/` on every read-only
+snapshot boot, and `limine-snapper-sync` bails with "You are not in Btrfs"
+before parsing arguments when `/` is an overlay. So from a snapshot boot,
+`omarchy-snapshot restore` cannot ever work. The Limine "Snapshots" submenu
+still *boots* snapshots fine — you just can't restore with the tooling.
 
 Layout facts this procedure depends on (verified 2026-08-24):
 - btrfs on `/dev/mapper/root` (LUKS, `cryptdevice=PARTUUID=00ef58bc-1b24-41ee-ac03-62d7c7e7c955:root`),
@@ -132,21 +80,6 @@ Layout facts this procedure depends on (verified 2026-08-24):
   (`/@/.snapshots/N/snapshot`), so it must be carried over when `@` is replaced.
 - `/boot` is the ESP (`/dev/nvme0n1p1`, vfat) — **rolling back `@` does not
   roll back the UKI**.
-
-### Before upgrading
-
-1. Anchor snapshot that retention can't delete — `omarchy-snapshot create`
-   uses `-c number`, and quattro's template sets `NUMBER_LIMIT=5`, so the
-   bridge's own pre-upgrade snapshot can rotate out. A plain snapper create
-   has no cleanup algorithm and survives everything:
-
-   ```sh
-   sudo snapper -c root create -d "pre-quattro manual anchor"
-   sudo limine-snapper-sync   # get it into the boot menu + preserve current UKI
-   ```
-
-2. `sudo pacman -S arch-install-scripts` — the snapshot-boot recovery
-   environment has no `arch-chroot` otherwise (a live USB does).
 
 ### Restoring (from a snapshot boot or a live USB)
 
@@ -183,12 +116,4 @@ sudo arch-chroot /mnt/@broken/mnt mkinitcpio -P
 
 Afterwards, from the restored system: `sudo btrfs subvolume delete /mnt/@broken`
 (mount top level again first; keep it around until the machine has proven
-itself). Verify remote unlock survived the UKI regen (the UKI is a PE binary,
-so extract the initrd section first):
-
-```sh
-objcopy -O binary --only-section=.initrd /boot/EFI/Linux/omarchy_linux.efi /tmp/initrd
-lsinitcpio -l /tmp/initrd | grep -E 'dropbear|encryptssh'
-```
-
-The pre-dropbear fallback UKI lives in `/boot/uki-backup/`.
+itself), and verify remote unlock with the objcopy check above.
