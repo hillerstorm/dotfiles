@@ -1,9 +1,12 @@
 -- Omarchy 4.x (quattro) port of looknfeel.conf.
 
+-- Custom center-master layout: like master orientation=center, but sides cap
+-- at 2 rows and split horizontally from the 6th window (hypr/centermaster.lua).
+require("hypr.centermaster")
+
 hl.config({
   general = {
-    -- Use master layout instead of dwindle.
-    layout = "master",
+    layout = "lua:centermaster",
   },
 
   decoration = {
