@@ -12,6 +12,24 @@ hl.config({
   decoration = {
     -- Use round window corners.
     rounding = 8,
+
+    -- Frosted glass behind the scratchpad (SUPER+S). Omarchy ships blur off;
+    -- turning it on only affects translucent surfaces, and every window here
+    -- is opaque (rule at the bottom), so the only visible effect is
+    -- blur.special: the workspace underneath an open special workspace.
+    dim_special = 0.25,
+    blur = {
+      enabled = true,
+      special = true,
+      size = 10,
+      passes = 3,
+      noise = 0.04, -- grain; this is what makes it read as brushed rather than smooth
+      contrast = 0.9,
+      brightness = 0.8,
+      vibrancy = 0.2,
+      vibrancy_darkness = 0.0,
+      popups = false,
+    },
   },
 
   master = {
@@ -25,3 +43,7 @@ hl.config({
 
 -- Fully opaque windows everywhere (overrides theme opacity).
 o.window(".*", { opacity = "1 1" })
+
+-- Inset the scratchpad so the glass is actually visible around it; with the
+-- stock 10px outer gap a single window covers nearly the whole screen.
+hl.workspace_rule({ workspace = "special:scratchpad", gaps_out = 40, gaps_in = 8 })
